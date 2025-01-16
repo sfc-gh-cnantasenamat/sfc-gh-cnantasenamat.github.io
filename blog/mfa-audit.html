@@ -1,0 +1,94 @@
+<h1>How to Build an MFA Audit System with Streamlit in Snowflake Notebooks</h1>
+<p>Have you ever wondered which users have Multi-Factor Authentication (MFA) enabled in your Snowflake environment? Security administrators often struggle to efficiently track and manage MFA compliance across their organization's user base.</p>
+<p>A Streamlit-based MFA audit system in Snowflake Notebooks provides an elegant solution by combining interactive monitoring with automated notifications.</p>
+<p>In this blog, we'll walk through building an MFA audit system that helps security administrators monitor user compliance and automatically notify stakeholders about non-compliant users. You'll learn how to:<br />
+- Create and query user MFA status data<br />
+- Configure email notifications in Snowflake<br />
+- Build an interactive Streamlit dashboard<br />
+- Implement automated compliance reporting</p>
+<h2>Building the MFA Audit System</h2>
+<p>Let's break down the implementation into manageable components, starting with the foundational setup.</p>
+<h3>Setting Up the Environment</h3>
+<p>First, we'll create our user dataset and configure email notifications:</p>
+<ol>
+<li>Create a table by uploading the demo data:</li>
+<li>Click <code>+</code> → <code>Table</code> → <code>From File</code></li>
+<li>Create table <code>CHANINN_DEMO_DATA.PUBLIC.MFA_DATA</code></li>
+<li>
+<p>Upload the provided demo data file</p>
+</li>
+<li>
+<p>Configure email notifications:</p>
+</li>
+</ol>
+<pre><code class="language-sql">CREATE OR REPLACE NOTIFICATION INTEGRATION my_email_int
+  TYPE=EMAIL
+  ENABLED=TRUE;
+</code></pre>
+<h3>Creating the MFA Status Query</h3>
+<p>We'll build a query to retrieve essential user information:</p>
+<pre><code class="language-sql">SELECT USER_ID, LOGIN_NAME, EMAIL, HAS_MFA
+FROM CHANINN_DEMO_DATA.PUBLIC.MFA_DATA
+WHERE HAS_MFA = 'FALSE'
+</code></pre>
+<p>Test the email notification system:</p>
+<pre><code class="language-sql">CALL SYSTEM$SEND_EMAIL(
+    'my_email_int',
+    'your-name@email-address.com',
+    'Email subject goes here',
+    'Hello world! This is a test message!'
+);
+</code></pre>
+<h3>Building the Interactive Dashboard</h3>
+<p>Now, let's create the Streamlit interface that combines data visualization with email reporting:</p>
+<pre><code class="language-python">from snowflake.snowpark.context import get_active_session
+import streamlit as st
+
+session = get_active_session()
+
+# DataFrame of users and their MFA status
+st.header('MFA activation status')
+
+mfa_selection = st.selectbox('Select an MFA status:', ('All', 'MFA Activated', 'MFA Not Activated'))
+if mfa_selection == 'All':
+    df = session.sql(
+              &quot;&quot;&quot;SELECT USER_ID, LOGIN_NAME, EMAIL, HAS_MFA 
+                    FROM CHANINN_DEMO_DATA.PUBLIC.MFA_DATA&quot;&quot;&quot;
+            ).to_pandas()
+    paragraph = &quot;&lt;p&gt;Here's the Multi-Factor Authentication status of all users. Please refer users to the &lt;a href='https://docs.snowflake.com/en/user-guide/security-mfa'&gt;Docs page on MFA&lt;/a&gt; to activate MFA.&lt;/p&gt;&quot;
+if mfa_selection == 'MFA Activated':
+    df = session.sql(
+              &quot;SELECT USER_ID, LOGIN_NAME, EMAIL, HAS_MFA FROM CHANINN_DEMO_DATA.PUBLIC.MFA_DATA WHERE HAS_MFA = 'TRUE'&quot;
+            ).to_pandas()
+    paragraph = &quot;&lt;p&gt;Congratulations, these users have activated their Multi-Factor Authentication!&lt;/p&gt;&quot;
+if mfa_selection == 'MFA Not Activated':
+    df = session.sql(
+              &quot;SELECT USER_ID, LOGIN_NAME, EMAIL, HAS_MFA FROM CHANINN_DEMO_DATA.PUBLIC.MFA_DATA WHERE HAS_MFA = 'FALSE'&quot;
+            ).to_pandas()
+    paragraph = &quot;&lt;p&gt;It appears that the following users have not activated Multi-Factor Authentication. Please refer users to the &lt;a href='https://docs.snowflake.com/en/user-guide/security-mfa'&gt;Docs page on MFA&lt;/a&gt; to activate MFA.&lt;/p&gt;&quot;
+st.dataframe(df)
+
+# Send Email
+if st.button('Send Report'):
+    email= 'your-name@email-address.com'
+    email_subject = &quot;Important: Activate Multi-Factor Authentication for User's Account&quot;
+    header = '&lt;p&gt;Dear System Administrator,&lt;/p&gt;'
+    body = header + '\n' + paragraph + '\n' + df.to_html(index=False, justify='left')
+
+    session.call('SYSTEM$SEND_EMAIL',
+                             'my_email_int',
+                              email,
+                              email_subject,
+                              body,
+                             'text/html')
+    st.success('Report sent!', icon='✅')
+</code></pre>
+<p>You've now created a powerful MFA audit system that combines interactive monitoring with automated reporting capabilities. This solution enables security administrators to efficiently track MFA compliance and take action when needed. The system can be further customized to meet specific organizational requirements, such as adding more detailed user information or implementing different notification schedules.</p>
+<h2>Resources</h2>
+<p>Articles:<br />
+- <a href="https://docs.snowflake.com/en/user-guide/security-mfa">Multi-factor authentication (MFA)</a><br />
+- <a href="https://docs.snowflake.com/en/user-guide/notifications/email-notifications">Sending email notifications</a><br />
+- <a href="https://docs.snowflake.com/en/user-guide/notifications/email-stored-procedures">Using SYSTEM$SEND_EMAIL</a></p>
+<p>Documentation:<br />
+- <a href="https://docs.snowflake.com/">Snowflake Documentation</a><br />
+- <a href="https://docs.streamlit.io/">Streamlit Documentation</a></p>
